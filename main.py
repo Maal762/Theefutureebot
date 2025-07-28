@@ -4,47 +4,48 @@ from flask import Flask, request, send_from_directory
 
 app = Flask(__name__)
 
-TELEGRAM_TOKEN = "8034746391:AAFEi1HrMNdDS3jLX8mFGz5vWjR7K1Aw3LY"
-TELEGRAM_CHAT_ID = "5573886497"
+# Telegram credentials
+BOT_TOKEN = "8034746391:AAFEi1HrMNdDS3jLX8mFGz5vWjR7K1Aw3LY"
+CHAT_ID = "5573886497"
 
-@app.route('/')
-def index():
-    return 'TradingView Screenshot + Telegram Bot is live.'
+@app.route("/")
+def home():
+    return "TradingView Telegram Bot is running!"
 
-@app.route('/alert', methods=['POST'])
+@app.route("/screenshot/<path:filename>")
+def screenshot(filename):
+    return send_from_directory("static", filename)
+
+@app.route("/alert", methods=["POST"])
 def alert():
-    data = request.json
-    message = data.get('message', 'Trade Alert 🚨')
-    image_url = data.get('image_url')
+    data = request.get_json()
+    if not data:
+        return "No data received", 400
 
-    if image_url:
-        send_photo_to_telegram(image_url, message)
-    else:
-        send_text_to_telegram(message)
+    message = data.get("message", "Trade Alert!")
+    screenshot_url = data.get("screenshot_url")
 
-    return 'Alert sent!'
+    send_telegram_message(message, screenshot_url)
+    return "Alert sent!", 200
 
-def send_text_to_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+def send_telegram_message(message, screenshot_url=None):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {
-        'chat_id': TELEGRAM_CHAT_ID,
-        'text': message,
-        'parse_mode': 'HTML'
+        "chat_id": CHAT_ID,
+        "text": message,
+        "parse_mode": "HTML"
     }
     requests.post(url, json=payload)
 
-def send_photo_to_telegram(photo_url, caption):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
-    payload = {
-        'chat_id': TELEGRAM_CHAT_ID,
-        'photo': photo_url,
-        'caption': caption
-    }
-    requests.post(url, data=payload)
+    if screenshot_url:
+        photo_url = f"https://theefutureebot.onrender.com/screenshot/{screenshot_url}"
+        
+        photo_payload = {
+            "chat_id": CHAT_ID,
+            "photo": photo_url,
+            "caption": message
+        }
+        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", data=photo_payload)
 
-@app.route('/static/<path:filename>')
-def serve_static(filename):
-    return send_from_directory('static', filename)
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
