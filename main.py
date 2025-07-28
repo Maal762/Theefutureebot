@@ -1,49 +1,47 @@
-import os
 import requests
-from flask import Flask, request, send_from_directory
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-TELEGRAM_BOT_TOKEN = "8034746391:AAFEi1HrMNdDS3jLX8mFGz5vWjR7K1Aw3LY"
-TELEGRAM_CHAT_ID = "5573886497"
-RENDER_URL = "https://theefutureebot.onrender.com"
+# Your Telegram Bot token and Chat ID
+TELEGRAM_BOT_TOKEN = '8034746391:AAFEi1HrMNdDS3jLX8mFGz5vWjR7K1Aw3LY'
+CHAT_ID = '5573886497'
 
-# Route to serve static image files
-@app.route("/static/snapshots/<path:filename>")
-def snapshot(filename):
-    return send_from_directory("static/snapshots", filename)
-
-# Webhook to receive alerts from TradingView
-@app.route("/", methods=["POST"])
-def webhook():
-    data = request.json
-    if not data:
-        return "No JSON received", 400
-
-    ticker = data.get("ticker", "UNKNOWN")
-    message = data.get("message", "No message content provided.")
-
-    image_path = f"static/snapshots/{ticker}.png"
-    image_url = f"{RENDER_URL}/static/snapshots/{ticker}.png"
-
-    if os.path.exists(image_path):
-        send_telegram_photo(image_path, message)
-    else:
-        send_telegram_message(f"{message}\n\n[Chart Image]({image_url})")
-
-    return "Alert received", 200
-
-# Function to send image to Telegram
-def send_telegram_photo(image_path, caption):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
-    with open(image_path, "rb") as photo:
-        requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "caption": caption}, files={"photo": photo})
-
-# Function to send message to Telegram
 def send_telegram_message(text):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"}
-    requests.post(url, json=payload)
+    url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
+    payload = {
+        'chat_id': CHAT_ID,
+        'text': text,
+        'parse_mode': 'Markdown'
+    }
+    try:
+        response = requests.post(url, data=payload)
+        return response.ok
+    except Exception as e:
+        print(f"Telegram send error: {e}")
+        return False
 
-if __name__ == "__main__":
+@app.route('/alert', methods=['POST'])
+def alert():
+    data = request.json
+
+    # Extract expected fields from TradingView alert JSON (adjust if needed)
+    ticker = data.get('ticker', 'Unknown')
+    price = data.get('price', 'N/A')
+    signal = data.get('signal', 'Alert')
+    timeframe = data.get('timeframe', '')
+    extra = data.get('extra', '')
+
+    # Compose message without mentioning strategy names, clean format
+    message = f"📊 *{ticker}* Alert\nPrice: {price}\nSignal: {signal}\nTimeframe: {timeframe}"
+    if extra:
+        message += f"\n{extra}"
+
+    sent = send_telegram_message(message)
+    if sent:
+        return jsonify({'status': 'success'}), 200
+    else:
+        return jsonify({'status': 'failed'}), 500
+
+if __name__ == '__main__':
     app.run(debug=True)
