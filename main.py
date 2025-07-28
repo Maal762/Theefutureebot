@@ -1,41 +1,70 @@
 import os
 import requests
 from flask import Flask, request, jsonify
+from datetime import datetime
 
 app = Flask(__name__)
 
+# ✅ Your Telegram Bot Token + Chat ID (PRE-FILLED)
 TELEGRAM_BOT_TOKEN = "8034746391:AAFEi1HrMNdDS3jLX8mFGz5vWjR7K1Aw3LY"
 TELEGRAM_CHAT_ID = "5573886497"
-RENDER_URL = "https://theefutureebot.onrender.com"
 
-def send_telegram_message(text):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-    resp = requests.post(url, json=payload)
-    return resp.status_code == 200
+# ✅ Function to generate AI-style trade commentary
+def generate_ai_message(ticker, direction, strike, expiry, contracts):
+    direction_word = "Call Option 🔼" if direction.lower() == "call" else "Put Option 🔽"
+    style = f"🔥 **{ticker} {direction_word} Alert** 🔥\n"
+    details = (
+        f"🎯 **Strike Price:** {strike}\n"
+        f"📅 **Expiry Date:** {expiry}\n"
+        f"📦 **Contracts:** {contracts}\n"
+    )
+    comment = f"📈 Aristotle x Chris Sain-style move. Aiming for +$10K/week on this setup. Stay sharp. 📊"
+    return f"{style}{details}{comment}"
 
+# ✅ Route to receive TradingView alerts
 @app.route('/alert', methods=['POST'])
 def alert():
-    if not request.is_json:
-        return jsonify({"error": "Expected application/json"}), 415
-    data = request.get_json()
-    # Example: extract some info from TradingView alert JSON payload
-    # Customize this according to your alert format
-    message = f"📈 *TradingView Alert*\n\nPayload:\n{data}"
+    try:
+        data = request.get_json()
+        
+        # Validate keys
+        required = ['ticker', 'direction', 'strike', 'expiry', 'contracts', 'chart_url']
+        if not all(k in data for k in required):
+            return jsonify({'error': 'Missing keys in JSON'}), 400
 
-    success = send_telegram_message(message)
-    if success:
-        return jsonify({"status": "Telegram message sent"}), 200
-    else:
-        return jsonify({"error": "Failed to send Telegram message"}), 500
+        # Extract values
+        ticker = data['ticker'].upper()
+        direction = data['direction'].capitalize()
+        strike = data['strike']
+        expiry = data['expiry']
+        contracts = data['contracts']
+        chart_url = data['chart_url']
 
-@app.route('/')
-def index():
-    return "TheeFuture Bot is running."
+        # AI-style message
+        message = generate_ai_message(ticker, direction, strike, expiry, contracts)
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+        # Get screenshot from chart_url using Screenshot API
+        screenshot_api = f"https://image.thum.io/get/width/1000/crop/900/noanimate/{chart_url}"
+
+        # Send Telegram message with screenshot
+        send_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+        payload = {
+            'chat_id': TELEGRAM_CHAT_ID,
+            'caption': message,
+            'photo': screenshot_api,
+            'parse_mode': 'Markdown'
+        }
+        r = requests.post(send_url, data=payload)
+
+        if r.status_code != 200:
+            return jsonify({'error': 'Telegram send failed', 'details': r.text}), 500
+
+        return jsonify({'success': True}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ✅ Root check
+@app.route('/', methods=['GET'])
+def home():
+    return "🟢 TheeFuture-Bot is LIVE and running."
