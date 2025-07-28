@@ -1,47 +1,41 @@
+import os
 import requests
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Your Telegram Bot token and Chat ID
-TELEGRAM_BOT_TOKEN = '8034746391:AAFEi1HrMNdDS3jLX8mFGz5vWjR7K1Aw3LY'
-CHAT_ID = '5573886497'
+TELEGRAM_BOT_TOKEN = "8034746391:AAFEi1HrMNdDS3jLX8mFGz5vWjR7K1Aw3LY"
+TELEGRAM_CHAT_ID = "5573886497"
+RENDER_URL = "https://theefutureebot.onrender.com"
 
 def send_telegram_message(text):
-    url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
-        'chat_id': CHAT_ID,
-        'text': text,
-        'parse_mode': 'Markdown'
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "Markdown"
     }
-    try:
-        response = requests.post(url, data=payload)
-        return response.ok
-    except Exception as e:
-        print(f"Telegram send error: {e}")
-        return False
+    resp = requests.post(url, json=payload)
+    return resp.status_code == 200
 
 @app.route('/alert', methods=['POST'])
 def alert():
-    data = request.json
+    if not request.is_json:
+        return jsonify({"error": "Expected application/json"}), 415
+    data = request.get_json()
+    # Example: extract some info from TradingView alert JSON payload
+    # Customize this according to your alert format
+    message = f"📈 *TradingView Alert*\n\nPayload:\n{data}"
 
-    # Extract expected fields from TradingView alert JSON (adjust if needed)
-    ticker = data.get('ticker', 'Unknown')
-    price = data.get('price', 'N/A')
-    signal = data.get('signal', 'Alert')
-    timeframe = data.get('timeframe', '')
-    extra = data.get('extra', '')
-
-    # Compose message without mentioning strategy names, clean format
-    message = f"📊 *{ticker}* Alert\nPrice: {price}\nSignal: {signal}\nTimeframe: {timeframe}"
-    if extra:
-        message += f"\n{extra}"
-
-    sent = send_telegram_message(message)
-    if sent:
-        return jsonify({'status': 'success'}), 200
+    success = send_telegram_message(message)
+    if success:
+        return jsonify({"status": "Telegram message sent"}), 200
     else:
-        return jsonify({'status': 'failed'}), 500
+        return jsonify({"error": "Failed to send Telegram message"}), 500
 
-if __name__ == '__main__':
-    app.run(debug=True)
+@app.route('/')
+def index():
+    return "TheeFuture Bot is running."
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
